@@ -80,7 +80,7 @@ class BERT_QA(Model):
         repeated_passage_mask = repeated_passage_mask.view(batch_size, passage_length)
         span_start_logits = util.replace_masked_values(span_start_logits, repeated_passage_mask, -1e7)
         span_end_logits = util.replace_masked_values(span_end_logits, repeated_passage_mask, -1e7)
-
+        print(span_start_logits)
 
         output_dict: Dict[str, Any] = {}
 
