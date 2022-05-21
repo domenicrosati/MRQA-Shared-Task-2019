@@ -17,6 +17,5 @@ class MRQAPredictor(Predictor):
                 question_instances.append(instance)
 
             predictions.append(self.predict_batch_instance(question_instances)[0])
-
-        formated_predictions = {pred['qid']:pred['best_span_str'] for pred in predictions}
+        formated_predictions = {pred['qid']: { 'answer': pred['best_span_str'], 'confidence': pred['confidence']} for pred in predictions}
         return formated_predictions

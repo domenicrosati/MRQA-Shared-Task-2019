@@ -19,6 +19,10 @@ from allennlp.training.metrics import Average, BooleanAccuracy, CategoricalAccur
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    return np.exp(x) / np.sum(np.exp(x), axis=1, keepdims=True)
+
 @Model.register("BERT_QA")
 class BERT_QA(Model):
     def __init__(self, vocab: Vocabulary,
@@ -109,6 +113,7 @@ class BERT_QA(Model):
         # Compute F1 and preparing the output dictionary.
         output_dict['best_span_str'] = []
         output_dict['qid'] = []
+        output_dict['confidence'] = []
 
         # getting best span prediction for
         best_span = self._get_example_predications(span_start_logits, span_end_logits, self._max_span_length)
@@ -123,6 +128,16 @@ class BERT_QA(Model):
             best_span_logit = np.max(span_start_logits_numpy[question_inds, best_span_cpu[question_inds][:, 0]] +
                                       span_end_logits_numpy[question_inds, best_span_cpu[question_inds][:, 1]])
 
+            start_confidence = np.max(
+                softmax(
+                    span_start_logits_numpy[question_inds, best_span_cpu[question_inds]]
+                ), axis=1
+            )
+            end_confidence = np.max(
+                softmax(
+                    span_end_logits_numpy[question_inds, best_span_cpu[question_inds]]
+                ), axis=1
+            )
             passage_str = question_instances_metadata[best_span_ind]['original_passage']
             offsets = question_instances_metadata[best_span_ind]['token_offsets']
 
@@ -136,6 +151,7 @@ class BERT_QA(Model):
             for i in range(len(question_inds)):
                 output_dict['best_span_str'].append(best_span_string)
                 output_dict['qid'].append(question_instances_metadata[best_span_ind]['question_id'])
+                output_dict['confidence'].append(start_confidence * end_confidence)
 
             f1_score = 0.0
             EM_score = 0.0
