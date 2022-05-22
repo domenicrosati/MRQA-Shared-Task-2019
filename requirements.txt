@@ -1,2 +1,2 @@
-allennlp
+allennlp==0.9.0
 termcolor

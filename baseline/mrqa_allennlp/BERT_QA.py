@@ -80,7 +80,6 @@ class BERT_QA(Model):
         repeated_passage_mask = repeated_passage_mask.view(batch_size, passage_length)
         span_start_logits = util.replace_masked_values(span_start_logits, repeated_passage_mask, -1e7)
         span_end_logits = util.replace_masked_values(span_end_logits, repeated_passage_mask, -1e7)
-        print(span_start_logits)
 
         output_dict: Dict[str, Any] = {}
 
@@ -90,88 +89,43 @@ class BERT_QA(Model):
         per_question_inds = np.split(range(batch_size), question_instances_split_inds)
         metadata = np.split(metadata, question_instances_split_inds)
 
-        # Compute the loss.
-        if span_start is not None and len(np.argwhere(span_start.squeeze().cpu() >= 0)) > 0:
-            # in evaluation some instances may not contain the gold answer, so we need to compute
-            # loss only on those that do.
-            inds_with_gold_answer = np.argwhere(span_start.view(-1).cpu().numpy() >= 0)
-            inds_with_gold_answer = inds_with_gold_answer.squeeze() if len(inds_with_gold_answer) > 1 else inds_with_gold_answer
-            if len(inds_with_gold_answer)>0:
-                loss = nll_loss(util.masked_log_softmax(span_start_logits[inds_with_gold_answer], \
-                                                    repeated_passage_mask[inds_with_gold_answer]),\
-                                span_start.view(-1)[inds_with_gold_answer], ignore_index=-1)
-                loss += nll_loss(util.masked_log_softmax(span_end_logits[inds_with_gold_answer], \
-                                                    repeated_passage_mask[inds_with_gold_answer]),\
-                                span_end.view(-1)[inds_with_gold_answer], ignore_index=-1)
-                output_dict["loss"] = loss
-
-        # This is a hack for cases in which gold answer is not provided so we cannot compute loss...
-        if 'loss' not in output_dict:
-            output_dict["loss"] = torch.cuda.FloatTensor([0], device=span_end_logits.device) \
-                if torch.cuda.is_available() else torch.FloatTensor([0])
-
         # Compute F1 and preparing the output dictionary.
-        output_dict['best_span_str'] = []
-        output_dict['qid'] = []
-        output_dict['confidence'] = []
+        output_dict['answers'] = [[] for i in range(batch_size)]
+        output_dict['qid'] = [[] for i in range(batch_size)]
+        output_dict['scores'] = [[] for i in range(batch_size)]
 
         # getting best span prediction for
-        best_span = self._get_example_predications(span_start_logits, span_end_logits, self._max_span_length)
-        best_span_cpu = best_span.detach().cpu().numpy()
-
         span_start_logits_numpy = span_start_logits.data.cpu().numpy()
         span_end_logits_numpy = span_end_logits.data.cpu().numpy()
-        # Iterating over every question (which may contain multiple instances, one per chunk)
-        for question_inds, question_instances_metadata in zip(per_question_inds, metadata):
-            best_span_ind = np.argmax(span_start_logits_numpy[question_inds, best_span_cpu[question_inds][:, 0]] +
-                      span_end_logits_numpy[question_inds, best_span_cpu[question_inds][:, 1]])
-            best_span_logit = np.max(span_start_logits_numpy[question_inds, best_span_cpu[question_inds][:, 0]] +
-                                      span_end_logits_numpy[question_inds, best_span_cpu[question_inds][:, 1]])
 
-            start_confidence = np.max(
-                softmax(
-                    span_start_logits_numpy[question_inds, best_span_cpu[question_inds]]
-                ), axis=1
-            )
-            end_confidence = np.max(
-                softmax(
-                    span_end_logits_numpy[question_inds, best_span_cpu[question_inds]]
-                ), axis=1
-            )
-            passage_str = question_instances_metadata[best_span_ind]['original_passage']
-            offsets = question_instances_metadata[best_span_ind]['token_offsets']
+        for i in range(batch_size):
+            # Normalize logits and spans to retrieve the answer
+            start_ = span_start_logits_numpy[i]
+            start_ = np.exp(start_ - start_.max(axis=-1, keepdims=True))
+            start_ = start_ / start_.sum()
 
-            predicted_span = best_span_cpu[question_inds[best_span_ind]]
-            start_offset = offsets[predicted_span[0]][0]
-            end_offset = offsets[predicted_span[1]][1]
-            best_span_string = passage_str[start_offset:end_offset]
+            end_ = span_end_logits_numpy[i]
+            end_ = np.exp(end_ - end_.max(axis=-1, keepdims=True))
+            end_ = end_ / end_.sum()
 
-            # Note: this is a hack, because AllenNLP, when predicting, expects a value for each instance.
-            # But we may have more than 1 chunk per question, and thus less output strings than instances
-            for i in range(len(question_inds)):
-                output_dict['best_span_str'].append(best_span_string)
-                output_dict['qid'].append(question_instances_metadata[best_span_ind]['question_id'])
-                output_dict['confidence'].append(start_confidence * end_confidence)
+            # Mask CLS
+            start_[0] = end_[0] = 0.0
 
-            f1_score = 0.0
-            EM_score = 0.0
-            gold_answer_texts = question_instances_metadata[best_span_ind]['answer_texts_list']
-            if gold_answer_texts:
-                f1_score = squad_eval.metric_max_over_ground_truths(squad_eval.f1_score,best_span_string,gold_answer_texts)
-                EM_score = squad_eval.metric_max_over_ground_truths(squad_eval.exact_match_score, best_span_string,gold_answer_texts)
-            self._official_f1(100 * f1_score)
-            self._official_EM(100 * EM_score)
+            starts, ends, scores = self._decode(start_, end_, 10, 30)
+            # Iterating over every qu.shapeestion (which may contain multiple instances, one per chunk)
+            for start, end, score in zip(starts, ends, scores):
 
-            # TODO move to predict
-            if self._predictions_file is not None:
-                with open(self._predictions_file,'a') as f:
-                    f.write(json.dumps({'question_id':question_instances_metadata[best_span_ind]['question_id'], \
-                                'best_span_logit':float(best_span_logit), \
-                                'f1':100 * f1_score,
-                                'EM':100 * EM_score,
-                                'best_span_string':best_span_string,\
-                                'gold_answer_texts':gold_answer_texts, \
-                                'qas_used_fraction':1.0}) + '\n')
+                passage_str = metadata[0][i]['original_passage']
+                offsets = metadata[0][i]['token_offsets']
+
+                start_offset = offsets[start][0]
+                end_offset = offsets[end][1]
+                best_span_string = passage_str[start_offset:end_offset]
+
+
+                output_dict['answers'][0].append(best_span_string)
+                output_dict['qid'][i] = [metadata[0][i]['question_id']]
+                output_dict['scores'][0].append(score)
 
         return output_dict
 
@@ -214,3 +168,46 @@ class BERT_QA(Model):
             j = best_word_span[b_i, 1]
 
         return best_word_span
+
+    def _decode(
+            self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int
+        ):
+            """
+            Take the output of any `ModelForQuestionAnswering` and will generate probabilities for each span to be the
+            actual answer.
+            In addition, it filters out some unwanted/impossible cases like answer len being greater than max_answer_len or
+            answer end position being before the starting position. The method supports output the k-best answer through
+            the topk argument.
+            Args:
+                start (`np.ndarray`): Individual start probabilities for each token.
+                end (`np.ndarray`): Individual end probabilities for each token.
+                topk (`int`): Indicates how many possible answer span(s) to extract from the model output.
+                max_answer_len (`int`): Maximum size of the answer to extract from the model's output.
+                undesired_tokens (`np.ndarray`): Mask determining tokens that can be part of the answer
+            """
+            # Ensure we have batch axis
+            if start.ndim == 1:
+                start = start[None]
+
+            if end.ndim == 1:
+                end = end[None]
+
+            # Compute the score of each tuple(start, end) to be the real answer
+            outer = np.matmul(np.expand_dims(start, -1), np.expand_dims(end, 1))
+
+            # Remove candidate with end < start and end - start > max_answer_len
+            candidates = np.tril(np.triu(outer), max_answer_len - 1)
+
+            #  Inspired by Chen & al. (https://github.com/facebookresearch/DrQA)
+            scores_flat = candidates.flatten()
+            if topk == 1:
+                idx_sort = [np.argmax(scores_flat)]
+            elif len(scores_flat) < topk:
+                idx_sort = np.argsort(-scores_flat)
+            else:
+                idx = np.argpartition(-scores_flat, topk)[0:topk]
+                idx_sort = idx[np.argsort(-scores_flat[idx])]
+
+            starts, ends = np.unravel_index(idx_sort, candidates.shape)[1:]
+            scores = candidates[0, starts, ends]
+            return starts, ends, scores
