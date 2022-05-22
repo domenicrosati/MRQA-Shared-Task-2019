@@ -2,7 +2,7 @@
 
 ## Overview
 
-The MRQA 2019 Shared Task focuses on generalization in question answering. An effective question answering system should do more than merely interpolate from the training set to answer test examples drawn from the same distribution: it should also be able to extrapolate to out-of-distribution examples — a significantly harder challenge. 
+The MRQA 2019 Shared Task focuses on generalization in question answering. An effective question answering system should do more than merely interpolate from the training set to answer test examples drawn from the same distribution: it should also be able to extrapolate to out-of-distribution examples — a significantly harder challenge.
 
 The format of the task is extractive question answering. Given a question and context passage, systems must find the word or phrase in the document that best answers the question. While this format is somewhat restrictive, it allows us to leverage many existing datasets, and its simplicity helps us focus on out-of-domain generalization, instead of other important but orthogonal challenges.
 
@@ -212,7 +212,7 @@ The final score for the MRQA shared task will be the macro-average across all te
 
 ## Baseline Model
 
-An implementation of a simple multi-task BERT-based baseline model is available in the [baseline](baseline) directory. 
+An implementation of a simple multi-task BERT-based baseline model is available in the [baseline](baseline) directory.
 
 Below are our baseline results (I = in-domain, O = out-of-domain):
 
@@ -230,7 +230,7 @@ Below are our baseline results (I = in-domain, O = out-of-domain):
 | (O) TextbookQA | 44.9 / 53.9 | 47.4 / 55.7 |
 | (O) RelationExtraction | 72.6 / 83.8 | 72.7 / 85.2 |
 | (O) DuoRC | 44.8 / 54.6 | 46.8 / 58.0 |
- 
+
 
 ## Submission
 
@@ -244,7 +244,7 @@ We have chosen this format so that we can create interactive demos for all submi
 
 ## Results
 Codalab results for all models submitted to the shared task are available in the `results` directory.
-These files include the dev and test EM and F1 scores for every model and every dataset. 
+These files include the dev and test EM and F1 scores for every model and every dataset.
 
 ## Citation
 

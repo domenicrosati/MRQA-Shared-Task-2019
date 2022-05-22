@@ -17,6 +17,7 @@ wget https://s3.us-east-2.amazonaws.com/mrqa/release/v2/dev/TextbookQA.jsonl.gz 
 wget https://s3.us-east-2.amazonaws.com/mrqa/release/v2/dev/RelationExtraction.jsonl.gz -O $OUTPUT/RelationExtraction.jsonl.gz
 wget https://s3.us-east-2.amazonaws.com/mrqa/release/v2/dev/DROP.jsonl.gz -O $OUTPUT/DROP.jsonl.gz
 wget https://s3.us-east-2.amazonaws.com/mrqa/release/v2/dev/DuoRC.ParaphraseRC.jsonl.gz -O $OUTPUT/DuoRC.jsonl.gz
+wget https://s3.us-east-2.amazonaws.com/mrqa/release/v2/dev/RACE.jsonl.gz -O $OUTPUT/RACE.jsonl.gz
 wget https://s3.us-east-2.amazonaws.com/mrqa/models/BERT/_MIX_6.tar.gz -O $OUTPUT/_MIX_6.tar.gz
 wget https://s3.us-east-2.amazonaws.com/mrqa/models/BERT/_MIX_6_large.tar.gz -O $OUTPUT/_MIX_6_large.tar.gz
 
